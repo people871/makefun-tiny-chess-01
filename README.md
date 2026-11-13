@@ -42,8 +42,10 @@ live in the build log, not this repo, so the repo stays under 8,192 bytes.
   d3, and four tricky positions).
 - Mate-in-1 puzzles solved instantly (Qxf7#, Ra8#).
 - Speed: ~27–31k nodes/second on one shared CPU; 80,000 nodes ≈ 2.9 s/move,
-  far under the 10 s/move limit.
+  far under the 10 s/move limit (Italian: 80,001 nodes, 2.91 s).
 - Determinism: the same position always yields the same move.
+- Re-authored in one single write (2026-11-13), byte-identical to v3
+  (sha256 in the build log); perft/puzzles re-verified after.
 - Local practice trials (submitted engine, 80,000 nodes): trial 0 **Elo
   1598** (5W / 1D / 2L), trial 1 **Elo 1396** (4W / 0D / 4L), mean 1497,
   above the 1,154 floor and the sunfish baseline's practice mean of 1,325.
