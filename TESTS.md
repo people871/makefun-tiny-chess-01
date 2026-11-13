@@ -44,6 +44,10 @@ size cuts):
 engine with NMP+LMR reached ~32–35k nps; the golfed version is a little
 slower because its TT key is a full board copy rather than a Zobrist hash.)
 
+At the submitted 80,000-node budget the same benchmark gives
+~27–31k nps; the Italian middlegame takes 2.92 s (80,001 nodes),
+still far under the 10 s/move limit.
+
 ## 4. Determinism
 
 Same position searched twice → same move (`b1c3 == b1c3 -> OK`). The search
@@ -84,13 +88,53 @@ BUILD_LOG.md §7.
 
 ## 7. Payload verification
 
-- `repo/main.py` is 4,047 bytes (cap 4,096).
+- `repo/main.py` is 4,087 bytes (cap 4,096).
 - Decompressing its lzma+base85 payload reproduces the golfed source
-  byte-for-byte (`dev/main_golfed.py`, 7,752 bytes).
+  byte-for-byte (`dev/main_golfed.py`, 7,847 bytes).
 - The decompressed code plays the same move with the same node count as
-  the golfed source on the benchmark position (b1c3, 60,001 nodes).
-- Repo total: main.py 4,047 + LICENSE 1,104 + README.md 2,737 = **7,888
+  the golfed source on the benchmark position (b1c3, 80,001 nodes at the
+  80,000 budget).
+- Repo total: main.py 4,087 + LICENSE 1,104 + README.md 2,827 = **8,018
   bytes** (cap 8,192). No file over 4,096.
 - `main.py` imports only stdlib (`json`, `os`, `urllib.request`,
   `urllib.error`, `lzma`, `base64`) and makes no model calls, uses no clock
   and no unseeded randomness.
+- Final payload re-verified 2026-11-13: perft (startpos d4, Kiwipete d3,
+  pos6 d3) all exact; mate Qxf7# solved (h5f7); determinism OK.
+
+## 8. Improvement trials — game-history repetition, node budget, second killer
+
+All trial 0 (same 8 openings, colours and opponents), run 2026-11-13
+with `dev/run_trial.sh`. Baseline v1 (bishop pair, 60k nodes, 1 killer,
+no game-history repetition): **Elo 1253, 2W / 2D / 4L** (see §6).
+
+- **v2 — game-history repetition restored (`hi`), 60k nodes, 1 killer**
+  (`dev/main_golfed_v2.py`, trial 0, wall 920 s): **Elo 1396, 4W / 0D / 4L,
+  spare_plies 199.** G1 W (depth-2), G2 W (depth-3), G3 W (depth-4,
+  adjudicated), G4 W (nodes-100k), G5 L (nodes-250k), G6 L (nodes-500k),
+  G7 L (nodes-1M), G8 L (nodes-2M). The two threefold draws of v1 are
+  gone — the engine now wins the games it was drawing. +143 Elo over v1.
+- **v3 — `hi` + 80,000-node budget, 1 killer** (`dev/main_golfed_v3.py`,
+  the submitted engine): trial 0 (wall 1,194 s) **Elo 1598, 5W / 1D / 2L,
+  spare_plies 515** — G1 W, G2 W, G3 W, G4 W, G5 W (nodes-250k),
+  G6 L (nodes-500k), G7 L (nodes-1M), G8 D (nodes-2M, threefold — the
+  engine seeks the repetition when behind). Trial 1 (different openings,
+  wall 1,311 s) **Elo 1396, 4W / 0D / 4L, spare_plies 308** — G1 W
+  (depth-2), G2 W (depth-3), G3 W (depth-4), G4 L (nodes-100k), G5 L
+  (nodes-250k), G6 W (nodes-500k), G7 L (nodes-1M), G8 L (nodes-2M).
+  Mean of the two trials: **1497**. Both trials beat the sunfish
+  baseline's practice mean (1,325); trial 0 beats the nodes-500k anchor
+  (1,596).
+- **v4 — `hi` + 80k nodes + second killer** (`dev/main_golfed_v4.py`,
+  trial 0, wall 969 s): **Elo 1396, 3W / 2D / 3L, spare_plies 354.**
+  G3 W→D and G4 W→L against depth-4 and nodes-100k — the second killer
+  did NOT help (1396 vs v3's 1598 on the same trial) and its payload
+  (4,112 bytes) breaks the 4,096 cap, so it was left out.
+- **NMP/LMR:** not removed for a separate test — the engine scores
+  1,396–1,598 with NMP+LMR+`hi`, against the dev engine's 1,326 without
+  them (effectively, §5), so they are kept.
+
+The submitted engine is v3: game-history repetition restored, 80,000
+nodes/move, one killer/ply, NMP (R = 2) + LMR, bishop pair. It clears
+the 1,154 final-entry floor by a wide margin and beats the sunfish
+baseline (1,325) on both practice trials.

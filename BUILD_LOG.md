@@ -155,12 +155,12 @@ instantly; determinism check passes (same position twice → same move).
   game-history repetition check (`hi`) is the prime suspect: without it the
   engine repeats positions and draws games it was winning.
 
-## 5. Repo layout (submitted)
+## 5. Repo layout (submitted, updated 2026-11-13 — see §8)
 
-- `main.py` — 4,047 bytes (compressed payload).
+- `main.py` — 4,087 bytes (compressed payload).
 - `LICENSE` — 1,104 bytes (MIT, from the kit starter).
-- `README.md` — 2,737 bytes (design explanation).
-- **Total: 7,888 bytes (cap 8,192).** No file over 4,096.
+- `README.md` — 2,827 bytes (design explanation).
+- **Total: 8,018 bytes (cap 8,192).** No file over 4,096.
 
 ## 6. What was NOT done
 
@@ -188,3 +188,75 @@ instantly; determinism check passes (same position twice → same move).
   headroom under the 10 s limit.
 - Test trial 1 and trial 2 (different openings/opponent order) to check
   variance before submitting.
+
+## 8. Improvement iteration (2026-11-13) — `hi` restored, 80k nodes, second killer tested
+
+Worked from the §7 list. All trials are trial 0 unless noted (same 8
+openings/opponents/colours), run with `dev/run_trial.sh`; scores saved as
+`dev/trial0_*_scores.json` / `dev/trial0_*_state.json`.
+
+### Restoring the game-history repetition check (`hi`) — the big win
+The payload drew games 2 and 4 by threefold repetition because it never
+saw the real game's positions: `rh()` replayed the moves but recorded
+nothing, so the search's `kk in ph[:-1]` check only covered the search
+path. Fix, reusing the existing path list so no new check is needed in
+`nm()`: `rh()` now seeds `ph` with the game's positions —
+`pf(w);ph[:]=[(bytes(b),s,c,e)]`, then after each replayed move
+`ph.append((bytes(b),s,c,e))`. The existing `kk in ph[:-1]` test in `nm()`
+then scores any repeat of a game position as 0 (a draw): the engine
+avoids repeating when ahead and seeks it when behind, exactly as the dev
+engine's `HIST` check did. Cost: +53 source bytes.
+
+### Golfing to fit it under the 4,096 cap
+The `hi` addition pushed the payload to 4,097 bytes (1 over). Two
+semantics-preserving golfs, both verified by perft/puzzles/benchmarks:
+- PS table: bind the centre value once —
+  `for q in range(8)for f in range(8)for c in[CC[q*8+f]]`, then use `c`
+  in the three piece-square terms (saves ~7 source bytes).
+- `ev()`: compute rank/file once per piece (`r=i>>4;f=i&7`), then use
+  `r*8+f` / `(r^7)*8+f` for the white/black square index and the king
+  squares (saves ~28 source bytes; also slightly faster — one index
+  computation instead of three).
+Result (`dev/main_golfed_v2.py`): source 7,847 bytes, payload **4,087
+bytes** (9 spare), total 7,928. Perft all OK, puzzles instant,
+determinism OK. A long-history speed check (121-entry `ph`, 60k nodes)
+ran 1.75 s / 34k nps — the wider repetition scan does not blow up move
+time.
+
+### Results
+- **v2 (`hi`, 60k nodes, 1 killer), trial 0, wall 920 s: Elo 1396,
+  4W / 0D / 4L, spare_plies 199.** The two threefold draws are gone;
+  games 2 and 4 are now wins. +143 over v1 (1253). The `hi` hypothesis
+  in §4 is confirmed.
+- **v3 (`hi`, 80,000 nodes, 1 killer), trial 0, wall 1,194 s: Elo 1598,
+  5W / 1D / 2L, spare_plies 515.** Beats nodes-250k and draws nodes-2M
+  (threefold — repetition sought when behind). Trial 1 (different
+  openings, wall 1,311 s): **Elo 1396, 4W / 0D / 4L, spare_plies 308**
+  (beats nodes-500k, loses to nodes-100k/250k). Mean of the two trials:
+  **1497**. The node increase costs 0 bytes (`60000` → `80000`) and
+  both walls stay well under the 1,800 s trial limit; no move approached
+  the 10 s limit. **v3 is the submitted engine.**
+- **v4 (`hi`, 80k, second killer), trial 0, wall 969 s: Elo 1396,
+  3W / 2D / 3L, spare_plies 354.** Games 3 (depth-4) and 4 (nodes-100k)
+  flipped from wins to a draw and a loss. The second killer did NOT
+  help (1396 vs v3's 1598 on the same trial) and its payload is 4,112
+  bytes — over the 4,096 cap — so it was left out. Implementation kept
+  in `dev/main_golfed_v4.py` for reference only.
+- **NMP/LMR:** not removed for a separate test. The engine scores
+  1,396–1,598 with NMP+LMR+`hi`, vs the dev engine's 1,326 with
+  effectively no NMP/LMR (§5) — they are kept.
+
+### Final state (2026-11-13)
+- `dev/main_golfed.py` = v3 (7,847 bytes); `repo/main.py` rebuilt from it
+  via `dev/build_payload.py`: **4,087 bytes**, round-trip verified
+  byte-for-byte. Repo total **8,018 bytes** (cap 8,192).
+- Final payload re-verified: perft (startpos d4, Kiwipete d3, pos6 d3)
+  all exact; mate Qxf7# solved; Italian at 80k nodes 2.92 s / 27,395
+  nps; determinism OK.
+- Submitted engine: game-history repetition restored, 80,000
+  nodes/move, one killer/ply, NMP (R = 2) + LMR, bishop pair.
+  Practice mean **1497** (trial 0: 1598, trial 1: 1396) — beats the
+  sunfish baseline (1,325) on both trials and clears the 1,154 floor
+  by a wide margin.
+- No push to GitHub and no submission to make.fun — the user handles
+  that with their own accounts.
